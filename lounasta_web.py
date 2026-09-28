@@ -24,9 +24,12 @@ import functools
 import html
 import http.server
 import json
+import socket
 import socketserver
 import sys
+import time
 import traceback
+import urllib.error
 import urllib.parse
 import webbrowser
 
@@ -55,26 +58,57 @@ SOURCES = [
 
 # ---------------------------------------------------------------------------- data
 
+ATTEMPTS = 3          # a reset connection is usually gone by the next try
+RETRY_PAUSE = 0.6     # seconds, doubled between attempts
+
+
+def is_transient(exc: BaseException) -> bool:
+    """Whether retrying the same request straight away is worth it."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in (408, 425, 429, 500, 502, 503, 504)
+    return isinstance(exc, (urllib.error.URLError, ConnectionError, TimeoutError,
+                            socket.timeout, socket.gaierror))
+
+
+def describe_error(exc: BaseException) -> tuple[str, str]:
+    """A sentence for the reader and the technical detail behind it."""
+    detail = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code == 404:
+            return "Ravintolan sivua ei löytynyt.", detail
+        if exc.code in (401, 403):
+            return "Ravintolan sivu ei anna lukea listaa.", detail
+        return f"Ravintolan sivu vastasi virheellä (HTTP {exc.code}).", detail
+    if is_transient(exc):
+        return "Ravintolan sivuun ei juuri nyt saatu yhteyttä.", detail
+    return "Lounaslistaa ei voitu lukea — sivun rakenne on ehkä muuttunut.", detail
+
 
 def fetch_all(date: dt.date, *, use_cache: bool = True) -> list[dict]:
     """Run every source in parallel; a failing source becomes an error card."""
     def run(entry):
         label, function, options = entry
-        try:
-            return list(function(date, use_cache=use_cache, **options))
-        except Exception as exc:  # one broken site must not take the page down
-            return [
-                {
-                    "id": f"error-{label.lower()}",
-                    "name": label,
-                    "subtitle": "",
-                    "url": "",
-                    "hours": None,
-                    "note": None,
-                    "sections": [],
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
-            ]
+        for attempt in range(1, ATTEMPTS + 1):
+            try:
+                return list(function(date, use_cache=use_cache, **options))
+            except Exception as exc:  # one broken site must not take the page down
+                if attempt < ATTEMPTS and is_transient(exc):
+                    time.sleep(RETRY_PAUSE * attempt)
+                    continue
+                message, detail = describe_error(exc)
+                return [
+                    {
+                        "id": f"error-{label.lower()}",
+                        "name": label,
+                        "subtitle": "",
+                        "url": "",
+                        "hours": None,
+                        "note": None,
+                        "sections": [],
+                        "error": message,
+                        "error_detail": detail,
+                    }
+                ]
 
     cards: list[dict] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(SOURCES)) as pool:
@@ -138,8 +172,15 @@ li:last-child { border-bottom: 0; }
 .price { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .diets { margin-left: 6px; font-size: 11px; color: var(--muted); }
 .desc { color: var(--muted); font-size: 13px; }
-.empty, .error { color: var(--muted); font-style: italic; }
-.error { color: var(--accent); font-style: normal; font-size: 13px; }
+.empty { color: var(--muted); font-style: italic; }
+.error { color: var(--accent); font-size: 14px; margin: 0 0 6px; }
+.error-actions { font-size: 13px; color: var(--muted); }
+.error-actions a { color: var(--accent); }
+.error-actions details { display: inline; }
+.error-actions summary { display: inline; cursor: pointer; list-style: none; }
+.error-actions summary::-webkit-details-marker { display: none; }
+.error-actions code { display: block; margin-top: 6px; font-size: 12px;
+                      word-break: break-word; color: var(--muted); }
 footer { max-width: 1100px; margin: 28px auto 0; color: var(--muted); font-size: 13px; }
 .legend { max-width: 1100px; margin: 24px auto 0; padding: 14px 18px; background: var(--card);
           border: 1px solid var(--line); border-radius: 12px; }
@@ -157,7 +198,21 @@ def esc(value) -> str:
     return html.escape(str(value or ""))
 
 
-def render_card(card: dict) -> str:
+def render_error(card: dict, *, live: bool, date: dt.date | None = None) -> str:
+    """A failed source explains itself and offers a retry, not a traceback."""
+    parts = [f'<p class="error">{esc(card["error"])}</p>', '<p class="error-actions">']
+    if live:
+        query = f"?date={date}&amp;refresh=1" if date else "?refresh=1"
+        parts.append(f'<a href="{query}">Yritä uudelleen</a>')
+    if card.get("error_detail"):
+        parts.append(' · ' if live else '')
+        parts.append('<details><summary>Tekninen tieto</summary>'
+                     f'<code>{esc(card["error_detail"])}</code></details>')
+    parts.append("</p>")
+    return "".join(parts)
+
+
+def render_card(card: dict, *, live: bool = True, date: dt.date | None = None) -> str:
     parts = ['<section class="card">']
     name = esc(card["name"])
     parts.append(f'<h2><a href="{esc(card["url"])}">{name}</a></h2>' if card.get("url")
@@ -167,7 +222,7 @@ def render_card(card: dict) -> str:
     if meta:
         parts.append(f'<p class="meta">{esc(meta)}</p>')
     if card.get("error"):
-        parts.append(f'<p class="error">{esc(card["error"])}</p>')
+        parts.append(render_error(card, live=live, date=date))
     if card.get("note"):
         parts.append(f'<p class="meta">{esc(card["note"])}</p>')
 
@@ -223,7 +278,7 @@ def render_page(date: dt.date, cards: list[dict], *, live: bool = True) -> str:
         f'<a href="?date={date}&amp;refresh=1">päivitä</a></nav>'
         if live else ""
     )
-    body = "\n".join(render_card(card) for card in cards)
+    body = "\n".join(render_card(card, live=live, date=date) for card in cards)
     stamp = dt.datetime.now().strftime("%H:%M")
     return f"""<!doctype html>
 <html lang="fi">
