@@ -227,7 +227,7 @@ def render(restaurants: list[dict], args, today: dt.date) -> str:
 
 
 def menu_for(date, *, restaurants=("Meilahti", "Terkko"), names=None, lang="fi",
-             price_group="student", use_cache=True) -> list[dict]:
+             price_group="student", prices=True, use_cache=True) -> list[dict]:
     """Normalised menu of the given restaurants for one date (for lounasta_web).
 
     `names` renames a restaurant on the card, e.g. {"Meilahti": "Unicafe"}.
@@ -247,7 +247,7 @@ def menu_for(date, *, restaurants=("Meilahti", "Terkko"), names=None, lang="fi",
                 {
                     "name": item["name"],
                     "diets": item["diets"],
-                    "price": price_text(item["prices"], price_group) or None,
+                    "price": (price_text(item["prices"], price_group) or None) if prices else None,
                     "description": "",
                 }
             )

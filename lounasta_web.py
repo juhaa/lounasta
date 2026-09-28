@@ -44,9 +44,10 @@ from lounas_common import DIET_NAMES, WEEKDAYS, normalize_diets, resolve_date
 SOURCES = [
     ("HUS", lounas_hus.menu_for, {}),
     ("UniCafe", lounas_unicafe.menu_for,
-     {"restaurants": ("Meilahti", "Terkko"), "names": {"Meilahti": "Unicafe"}}),
+     {"restaurants": ("Meilahti", "Terkko"), "names": {"Meilahti": "Unicafe"},
+      "prices": False}),
     ("Scandic", lounas_scandic.menu_for, {}),
-    ("Meiccu", lounas_meiccu.menu_for, {}),
+    ("Meiccu", lounas_meiccu.menu_for, {"prices": False}),
     ("Viisi Penniä", lounas_lounastaja.menu_for, {}),
     ("il Trio", lounas_iltrio.menu_for, {}),
 ]

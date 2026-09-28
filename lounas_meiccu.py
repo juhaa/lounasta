@@ -235,7 +235,7 @@ def render(days: list[dict], notes: list[str], extras: list[str], args, parsed_a
 # ------------------------------------------------------------------- aggregator
 
 
-def menu_for(date, *, url=URL, use_cache=True) -> list[dict]:
+def menu_for(date, *, url=URL, prices=True, use_cache=True) -> list[dict]:
     """Normalised Meiccu menu for one date (for lounasta_web)."""
     blocks = [(b["tag"], b["text"]) for b in html_blocks(fetch_page(url, use_cache=use_cache),
                                                          tags="h[1-6]|p")]
@@ -248,7 +248,7 @@ def menu_for(date, *, url=URL, use_cache=True) -> list[dict]:
             {
                 "name": dish["name"],
                 "diets": dish["diets"],
-                "price": f"{dish['price']} €" if dish["price"] else None,
+                "price": f"{dish['price']} €" if dish["price"] and prices else None,
                 "description": "",
             }
         )

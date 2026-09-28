@@ -27,7 +27,9 @@ Sources are fetched in parallel and each is isolated: a site that is down or
 has been redesigned shows its error on its own card while the rest of the page
 still renders. Which restaurants appear is the `SOURCES` list at the top of
 `lounasta_web.py` — each entry is one fetcher plus its options, so following a
-different UniCafe or another Scandic hotel is a one-line edit.
+different UniCafe or another Scandic hotel is a one-line edit. `"prices": False`
+there hides per-dish prices for restaurants that charge one price for the whole
+lunch; the command-line scripts always print them.
 
 Every fetcher also exposes `menu_for(date)` returning the same normalised
 shape the page uses, which is the seam to add a new restaurant on.
