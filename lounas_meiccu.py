@@ -44,7 +44,7 @@ DAY_INDEX = {
 }
 
 SECTION_RE = re.compile(r"^(buffet|keittiöstä|keittiosta|à la carte|a la carte|grillistä)\b", re.I)
-PRICE_RE = re.compile(r"(\d{1,3},\d{2})\s*(?:€|e)?\s*$")
+PRICE_RE = re.compile(r"(\d{1,3},\d{1,2})\s*(?:€|e)?\s*$")
 DIET_CODES = {"L", "VL", "M", "G", "V", "A", "VEG"}
 DIET_RE = re.compile(r"[\s,]((?:(?:%s)[\s,.]*)+)$" % "|".join(sorted(DIET_CODES, key=len, reverse=True)))
 
@@ -71,13 +71,24 @@ def fetch_page(url: str, *, use_cache: bool = True) -> str:
 # --------------------------------------------------------------------------- parse
 
 
+ONLY_DIETS_RE = re.compile(r"^(?:(?:%s)[\s,.]*)+$" % "|".join(DIET_CODES), re.I)
+
+
 def split_dish(text: str) -> tuple[str, list[str], str | None]:
     """Split "Wieninleike L 20,50" into name, diet codes and price."""
     price = None
     price_match = PRICE_RE.search(text)
     if price_match:
         price = price_match.group(1)
+        if len(price.split(",")[1]) == 1:
+            price += "0"
         text = text[: price_match.start()].strip(" ,.:")
+
+    # Some days are published with the diet codes in place but the dish names
+    # still missing; those rows carry no dish at all.
+    if ONLY_DIETS_RE.match(text.strip()):
+        codes = [c.upper() for c in re.split(r"[\s,.]+", text.strip()) if c.upper() in DIET_CODES]
+        return "", codes, price
 
     diets: list[str] = []
     while True:
@@ -169,16 +180,19 @@ def parse_week(blocks: list[tuple[str, str]], today: dt.date) -> tuple[list[dict
 
 
 def fill_missing_dates(days: list[dict], today: dt.date) -> None:
-    """Some headings carry no date ("Ke"); place them in the same week."""
-    known = [(d["weekday"], dt.date.fromisoformat(d["date"])) for d in days if d["date"]]
-    if known:
-        weekday, date = known[0]
+    """Place every day in the week: some headings carry no date ("Ke"), and a
+    typed date sometimes disagrees with its own weekday name."""
+    dated = [(d["weekday"], dt.date.fromisoformat(d["date"])) for d in days if d["date"]]
+    agreeing = [(wd, date) for wd, date in dated if date.weekday() == wd]
+    if agreeing:
+        weekday, date = agreeing[0]
         monday = date - dt.timedelta(days=weekday)
+    elif dated:
+        monday = dated[0][1] - dt.timedelta(days=dated[0][0])
     else:
         monday = today - dt.timedelta(days=today.weekday())
     for day in days:
-        if not day["date"]:
-            day["date"] = (monday + dt.timedelta(days=day["weekday"])).isoformat()
+        day["date"] = (monday + dt.timedelta(days=day["weekday"])).isoformat()
 
 
 # --------------------------------------------------------------------------- print
