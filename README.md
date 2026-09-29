@@ -85,11 +85,22 @@ The page is published at <https://juhaa.github.io/lounasta/>, built by
 `.github/workflows/pages.yml` and served from GitHub Pages.
 
 Because a static page cannot fetch anything itself, it is rebuilt on a
-schedule instead: every 30 minutes between 04:00 and 11:00 UTC, which is
-07:00-13:00 in Helsinki whether or not daylight saving is in force. A
-restaurant that publishes its menu late in the morning therefore appears
-within half an hour rather than the next day. The job also runs on every push
-to `main` and can be started by hand from the Actions tab.
+schedule instead, and which day it is built for follows the clock:
+
+| Helsinki | UTC cron | builds |
+| --- | --- | --- |
+| 06:00-14:30, every 30 min | `*/30 4-11 * * *` | today |
+| 16:00-23:00, hourly | `0 14-20 * * *` | tomorrow |
+
+A restaurant that publishes its menu late in the morning therefore appears
+within half an hour rather than the next day, and the page is never left
+sitting overnight on a day that is already over. The two windows are kept
+apart in UTC so they cannot overlap under either EET or EEST. The job also
+runs on every push to `main` and can be started by hand from the Actions tab.
+
+The choice between today and tomorrow is made from the Helsinki hour at build
+time — after 15:00 it is tomorrow — rather than from which cron entry fired,
+so a manual or push-triggered run in the evening builds tomorrow too.
 
 The build runs with `TZ=Europe/Helsinki`, so "today" is the Helsinki day and
 not the runner's UTC one. Each run starts on a fresh runner with an empty
@@ -103,7 +114,7 @@ before:
 
 | | |
 | --- | --- |
-| hosted | today's menus, rebuilt every 30 minutes |
+| hosted | one day's menus: today until mid-afternoon, then tomorrow |
 | `./lounasta_web.py` | all of it — `?date=`, `?refresh=1`, `/api` |
 
 One thing to know about the schedule: GitHub disables a repository's cron

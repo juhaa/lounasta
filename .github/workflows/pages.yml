@@ -1,14 +1,16 @@
 # Build the lunch page and publish it to GitHub Pages.
 #
-# The page is static, so it is rebuilt on a schedule rather than per request:
-# every 30 minutes through the morning, so a restaurant that publishes its menu
-# late still shows up within half an hour. Times below are UTC; the window
-# 04:00-11:00 covers 07:00-13:00 Helsinki in both EET and EEST.
+# The page is static, so it is rebuilt on a schedule rather than per request.
+# Through the morning it shows today's lunch; from the late afternoon it shows
+# tomorrow's, so the page is never left sitting on a day that is already over.
+# Cron is always UTC, and the two windows are kept apart in UTC so that the
+# morning and evening runs cannot overlap under either EET or EEST.
 name: pages
 
 on:
   schedule:
-    - cron: "*/30 4-11 * * *"
+    - cron: "*/30 4-11 * * *"   # 06:00-14:30 Helsinki, every 30 min: today
+    - cron: "0 14-20 * * *"     # 16:00-23:00 Helsinki, hourly: tomorrow
   push:
     branches: [main]
   workflow_dispatch:
@@ -29,7 +31,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      TZ: Europe/Helsinki   # the page is built for "today" in Helsinki, not UTC
+      TZ: Europe/Helsinki   # every date below is the Helsinki one, not UTC
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +42,12 @@ jobs:
       - name: Build the page
         run: |
           mkdir -p site
-          ./lounasta_web.py --build site/index.html
+          # Which day the page is for follows the Helsinki clock rather than
+          # which cron entry fired, so a manual or push-triggered run in the
+          # evening also builds tomorrow.
+          if [ "$(date +%-H)" -ge 15 ]; then day=tomorrow; else day=today; fi
+          echo "building $day ($(date '+%Y-%m-%d %H:%M %Z'))"
+          ./lounasta_web.py --build site/index.html --date "$day"
 
       - uses: actions/upload-pages-artifact@v3
         with:
