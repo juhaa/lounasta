@@ -1,0 +1,57 @@
+# Build the lunch page and publish it to GitHub Pages.
+#
+# The page is static, so it is rebuilt on a schedule rather than per request:
+# every 30 minutes through the morning, so a restaurant that publishes its menu
+# late still shows up within half an hour. Times below are UTC; the window
+# 04:00-11:00 covers 07:00-13:00 Helsinki in both EET and EEST.
+name: pages
+
+on:
+  schedule:
+    - cron: "*/30 4-11 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages deployment needs id-token; contents stays read-only since nothing is
+# committed back to the repository.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deployments race; a late build should win over an earlier one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Helsinki   # the page is built for "today" in Helsinki, not UTC
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the page
+        run: |
+          mkdir -p site
+          ./lounasta_web.py --build site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

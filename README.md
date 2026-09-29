@@ -79,6 +79,37 @@ Common conventions: `-d/--date` accepts `today` (default), `tomorrow`,
 `--json` prints machine-readable output, `--raw` dumps the untouched API
 response, `--list-restaurants` shows what can be asked for.
 
+## Hosting
+
+The page is published at <https://juhaa.github.io/lounasta/>, built by
+`.github/workflows/pages.yml` and served from GitHub Pages.
+
+Because a static page cannot fetch anything itself, it is rebuilt on a
+schedule instead: every 30 minutes between 04:00 and 11:00 UTC, which is
+07:00-13:00 in Helsinki whether or not daylight saving is in force. A
+restaurant that publishes its menu late in the morning therefore appears
+within half an hour rather than the next day. The job also runs on every push
+to `main` and can be started by hand from the Actions tab.
+
+The build runs with `TZ=Europe/Helsinki`, so "today" is the Helsinki day and
+not the runner's UTC one. Each run starts on a fresh runner with an empty
+cache, so every build refetches all six sources; `--no-cache` is not needed.
+Nothing is committed back to the repository — the page is uploaded as a Pages
+artifact, so the history stays clean.
+
+Only `/` exists on the hosted page. The query parameters and the JSON endpoint
+in the table above belong to the local server, which still runs exactly as
+before:
+
+| | |
+| --- | --- |
+| hosted | today's menus, rebuilt every 30 minutes |
+| `./lounasta_web.py` | all of it — `?date=`, `?refresh=1`, `/api` |
+
+One thing to know about the schedule: GitHub disables a repository's cron
+workflows after 60 days without activity, and mails a warning first. A push,
+or one press of "Run workflow", resets the clock.
+
 ## lounas_unicafe.py
 
 The site is a React SPA fed by one WordPress REST endpoint that returns every
