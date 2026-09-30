@@ -89,21 +89,33 @@ schedule instead, and which day it is built for follows the clock:
 
 | Helsinki | UTC cron | builds |
 | --- | --- | --- |
-| 06:07-14:37, twice an hour | `7,37 4-11 * * *` | today |
-| 16:12-23:12, hourly | `12 14-20 * * *` | tomorrow |
+| 03:17 and 05:47 | `17 1 * * *`, `47 3 * * *` | today |
+| 06:07-12:37, twice an hour | `7,37 4-9 * * *` | today |
+| 13:23 and 14:23 | `23 10,11 * * *` | today |
+| 15:12-23:42, twice an hour | `12,42 13-20 * * *` | tomorrow |
 
 A restaurant that publishes its menu late in the morning therefore appears
 within half an hour rather than the next day, and the page is never left
-sitting overnight on a day that is already over. The two windows are kept
-apart in UTC so they cannot overlap under either EET or EEST. The job also
+sitting overnight on a day that is already over. Nothing is scheduled in the
+12:00-13:00 UTC hour, which is the one that falls on opposite sides of the
+today/tomorrow cut depending on whether EET or EEST is in force. The job also
 runs on every push to `main` that touches something other than prose, and can
 be started by hand from the Actions tab.
+
+The overnight pair is the one that matters most, and it is there because no
+single run can be relied on. Building tomorrow's page in the evening already
+means a dropped morning leaves the page correct if stale; the overnight runs
+cover the case where the evening was dropped too, and they are placed in the
+quietest hours GitHub has, where a scheduled run is likeliest to actually
+happen. Between them there are three separate chances at a page for the right
+day before anyone looks at it in the morning.
 
 The odd minutes are deliberate. GitHub delays scheduled runs under load and
 drops them outright when it is busy enough, and the top of the hour is its
 busiest moment; an earlier `*/30` schedule, landing on `:00` and `:30`, lost
-most of its runs. Odd minutes are asked for instead, and fewer of them. Even
-so the schedule is best-effort and nothing more: if the page ever has to be
+most of its runs. Odd minutes are asked for instead, and the day's runs are
+spread across it rather than bunched into one window. Even so the schedule is
+best-effort and nothing more: if the page ever has to be
 fresh to the minute, the reliable arrangement is an outside cron service
 calling the `workflow_dispatch` API rather than GitHub's own scheduler.
 

@@ -6,14 +6,30 @@
 #
 # Cron is always UTC, and the minutes are deliberately odd: GitHub delays or
 # drops scheduled runs under load, and the top of the hour is its busiest
-# moment, so :00 and :30 are the two worst times to ask for. The two windows
-# are also kept apart in UTC so they cannot overlap under either EET or EEST.
+# moment, so :00 and :30 are the two worst times to ask for. No entry uses
+# 12:00-13:00 UTC either, since that hour falls on opposite sides of the
+# today/tomorrow cut depending on whether EET or EEST is in force.
+#
+# No single run is relied on. The schedule assumes runs will be dropped and
+# asks often enough, and early enough in the day, that the page is right even
+# when most of them are.
 name: pages
 
 on:
   schedule:
-    - cron: "7,37 4-11 * * *"   # 06:07-14:37 Helsinki, twice an hour: today
-    - cron: "12 14-20 * * *"    # 16:12-23:12 Helsinki, hourly: tomorrow
+    # Overnight, in the quietest hours GitHub has, where a scheduled run is
+    # most likely to actually happen: today's page, so that a page for the
+    # right day exists before anyone looks even if the evening before and the
+    # morning after both come to nothing.
+    - cron: "17 1 * * *"        # 03:17/04:17 Helsinki: today
+    - cron: "47 3 * * *"        # 05:47/06:47 Helsinki: today
+    # Through the morning, as the menus appear.
+    - cron: "7,37 4-9 * * *"    # 06:07-12:37 Helsinki, twice an hour: today
+    - cron: "23 10,11 * * *"    # 13:23-14:23 Helsinki, hourly: today
+    # From mid-afternoon, once lunch is over. Several attempts rather than one
+    # a day, because a dropped evening run is exactly what leaves the next
+    # morning with nothing to fall back on.
+    - cron: "12,42 13-20 * * *" # 15:12-23:42 Helsinki, twice an hour: tomorrow
   push:
     branches: [main]
     paths-ignore: ["**.md"]     # prose changes cannot change the page
