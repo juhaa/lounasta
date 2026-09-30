@@ -89,18 +89,36 @@ schedule instead, and which day it is built for follows the clock:
 
 | Helsinki | UTC cron | builds |
 | --- | --- | --- |
-| 06:00-14:30, every 30 min | `*/30 4-11 * * *` | today |
-| 16:00-23:00, hourly | `0 14-20 * * *` | tomorrow |
+| 06:07-14:37, twice an hour | `7,37 4-11 * * *` | today |
+| 16:12-23:12, hourly | `12 14-20 * * *` | tomorrow |
 
 A restaurant that publishes its menu late in the morning therefore appears
 within half an hour rather than the next day, and the page is never left
 sitting overnight on a day that is already over. The two windows are kept
 apart in UTC so they cannot overlap under either EET or EEST. The job also
-runs on every push to `main` and can be started by hand from the Actions tab.
+runs on every push to `main` that touches something other than prose, and can
+be started by hand from the Actions tab.
+
+The odd minutes are deliberate. GitHub delays scheduled runs under load and
+drops them outright when it is busy enough, and the top of the hour is its
+busiest moment; an earlier `*/30` schedule, landing on `:00` and `:30`, lost
+most of its runs. Odd minutes are asked for instead, and fewer of them. Even
+so the schedule is best-effort and nothing more: if the page ever has to be
+fresh to the minute, the reliable arrangement is an outside cron service
+calling the `workflow_dispatch` API rather than GitHub's own scheduler.
 
 The choice between today and tomorrow is made from the Helsinki hour at build
 time — after 15:00 it is tomorrow — rather than from which cron entry fired,
 so a manual or push-triggered run in the evening builds tomorrow too.
+
+Before anything is published the built page is read back by `check_page.py`,
+which is the difference between a page that renders and a page worth looking
+at. A single restaurant being down does not stop the deploy — six cards beat
+yesterday's seven — but a page that lost a card outright, or came back with no
+menus at all, does. Whether every source truly answered is then reported by a
+separate job that runs *after* the deploy, so a restaurant that has quietly
+changed its site turns the run red and sends the usual failure mail without
+ever holding up the page.
 
 The build runs with `TZ=Europe/Helsinki`, so "today" is the Helsinki day and
 not the runner's UTC one. Each run starts on a fresh runner with an empty
@@ -120,6 +138,42 @@ before:
 One thing to know about the schedule: GitHub disables a repository's cron
 workflows after 60 days without activity, and mails a warning first. A push,
 or one press of "Run workflow", resets the clock.
+
+## Development
+
+`main` is the publish button: what is merged there is built and deployed by
+`pages.yml`. Work therefore happens on a branch and arrives through a pull
+request, where `ci.yml` runs the same build without deploying anything. It
+compiles every module, builds both today's and tomorrow's page — two different
+paths through `resolve_date` and through each fetcher's week handling — checks
+both, and keeps them as an artifact to download and look at.
+
+Nothing about the local loop changes, and it stays the more capable of the
+two: the hosted page is the same program with one flag, so there is no second
+implementation to drift.
+
+```
+./lounasta_web.py --open                    # ?date=, ?refresh=1, /api
+./lounasta_web.py --build /tmp/x.html --date tomorrow   # what CI builds
+./check_page.py /tmp/x.html                 # what CI checks
+```
+
+`check_page.py` reads a built page back and fails if a card is missing, if a
+card is showing an error, or if no card has a menu at all. An empty card is
+not a failure by itself: restaurants close on Mondays and at weekends.
+
+```
+./check_page.py site/index.html                     # strict
+./check_page.py site/index.html --allow-errors 2    # tolerate a source being down
+./check_page.py site/index.html --expect 7          # how many cards to insist on
+```
+
+Adding a restaurant means adding its entry to `SOURCES` and raising
+`--expect`, which are the two places the count is written down.
+
+Two settings on the repository are worth having, neither of which lives in
+this tree: requiring the `ci` check on pull requests to `main`, and keeping
+`main` protected so the publish button cannot be pressed by accident.
 
 ## lounas_unicafe.py
 

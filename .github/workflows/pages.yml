@@ -3,16 +3,20 @@
 # The page is static, so it is rebuilt on a schedule rather than per request.
 # Through the morning it shows today's lunch; from the late afternoon it shows
 # tomorrow's, so the page is never left sitting on a day that is already over.
-# Cron is always UTC, and the two windows are kept apart in UTC so that the
-# morning and evening runs cannot overlap under either EET or EEST.
+#
+# Cron is always UTC, and the minutes are deliberately odd: GitHub delays or
+# drops scheduled runs under load, and the top of the hour is its busiest
+# moment, so :00 and :30 are the two worst times to ask for. The two windows
+# are also kept apart in UTC so they cannot overlap under either EET or EEST.
 name: pages
 
 on:
   schedule:
-    - cron: "*/30 4-11 * * *"   # 06:00-14:30 Helsinki, every 30 min: today
-    - cron: "0 14-20 * * *"     # 16:00-23:00 Helsinki, hourly: tomorrow
+    - cron: "7,37 4-11 * * *"   # 06:07-14:37 Helsinki, twice an hour: today
+    - cron: "12 14-20 * * *"    # 16:12-23:12 Helsinki, hourly: tomorrow
   push:
     branches: [main]
+    paths-ignore: ["**.md"]     # prose changes cannot change the page
   workflow_dispatch:
 
 # Pages deployment needs id-token; contents stays read-only since nothing is
@@ -32,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Europe/Helsinki   # every date below is the Helsinki one, not UTC
+    outputs:
+      sources-clean: ${{ steps.sources.outputs.clean }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +55,30 @@ jobs:
           echo "building $day ($(date '+%Y-%m-%d %H:%M %Z'))"
           ./lounasta_web.py --build site/index.html --date "$day"
 
+      # A restaurant being down is not a reason to withhold the whole page —
+      # six cards beat yesterday's seven — so the gate here is catastrophe
+      # only. Whether every source actually answered is reported separately,
+      # after the deploy, so it can be noticed without blocking it.
+      - name: Check the page
+        shell: bash
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ./check_page.py site/index.html --allow-errors 2 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Note whether every source answered
+        id: sources
+        shell: bash
+        run: |
+          if ./check_page.py site/index.html > /dev/null 2>&1; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            ./check_page.py site/index.html 2>&1 | sed -n 's/^  - /::warning::/p' || true
+          fi
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -62,3 +92,17 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Runs after the page is already live, purely so that a source which has
+  # quietly stopped answering turns the run red and sends the usual failure
+  # mail, instead of sitting unnoticed behind an error card for weeks.
+  sources:
+    needs: [build, deploy]
+    if: needs.build.outputs.sources-clean == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: A source failed
+        run: |
+          echo "The page was published, but not every restaurant answered."
+          echo "See the 'Check the page' summary on the build job."
+          exit 1

@@ -1,0 +1,61 @@
+# Check a change before it reaches main, and so before it reaches the page.
+#
+# main is the publish button: anything merged there is built and deployed by
+# pages.yml. This runs the same build on branches and pull requests instead,
+# without deploying, so a broken fetcher fails here rather than on the live
+# page. The built page is kept as an artifact, to be downloaded and looked at.
+name: ci
+
+on:
+  pull_request:
+    paths-ignore: ["**.md"]
+  push:
+    branches-ignore: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Helsinki
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile every module
+        run: python -m compileall -q .
+
+      # Both days are built because they are different code paths through
+      # resolve_date and through each fetcher's week handling, and because the
+      # evening page is the one nobody looks at until it is already wrong.
+      - name: Build and check today
+        shell: bash
+        run: |
+          mkdir -p site
+          ./lounasta_web.py --build site/today.html --date today
+          ./check_page.py site/today.html --allow-errors 2
+
+      - name: Build and check tomorrow
+        shell: bash
+        run: |
+          ./lounasta_web.py --build site/tomorrow.html --date tomorrow
+          ./check_page.py site/tomorrow.html --allow-errors 2
+
+      - name: Keep the pages to look at
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page
+          path: site/
+          retention-days: 7
