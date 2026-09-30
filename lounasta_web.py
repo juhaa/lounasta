@@ -279,7 +279,10 @@ def render_page(date: dt.date, cards: list[dict], *, live: bool = True) -> str:
         if live else ""
     )
     body = "\n".join(render_card(card, live=live, date=date) for card in cards)
-    stamp = dt.datetime.now().strftime("%H:%M")
+    # A page built the evening before is read the next morning, and a page
+    # the scheduler never rebuilt can be older still, so the stamp carries a
+    # date as well as a time.
+    stamp = dt.datetime.now().strftime("%d.%m.%Y klo %H:%M")
     return f"""<!doctype html>
 <html lang="fi">
 <head>
