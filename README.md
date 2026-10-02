@@ -172,7 +172,15 @@ implementation to drift.
 
 `check_page.py` reads a built page back and fails if a card is missing, if a
 card is showing an error, or if no card has a menu at all. An empty card is
-not a failure by itself: restaurants close on Mondays and at weekends.
+not a failure by itself: restaurants close on Mondays.
+
+Saturdays and Sundays are the exception, and the script reads which day it is
+looking at out of the page's own title. At a weekend every restaurant is shut
+and UniCafe leaves the page altogether rather than rendering an empty card, so
+a correct weekend page is both short and empty — five cards, no menus. Neither
+the count nor the emptiness is checked on those two days; errors still are. A
+page whose date cannot be read is treated as a weekday, which is the stricter
+reading.
 
 ```
 ./check_page.py site/index.html                     # strict

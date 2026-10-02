@@ -12,7 +12,10 @@ built HTML back and fails if something is missing:
   * at least one card actually has a menu (a date bug empties all of them)
 
 A card with no dishes is not a failure on its own: restaurants close on
-Mondays and at weekends.
+Mondays. At a weekend they all do, and UniCafe drops its cards from the page
+altogether rather than showing them empty, so on a Saturday or a Sunday —
+read from the page's own date — neither the count nor the emptiness is
+checked, and only the errors are.
 
     ./check_page.py site/index.html
     ./check_page.py site/index.html --expect 7 --allow-errors 1
@@ -23,6 +26,7 @@ Python 3.10+, standard library only.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import html
 import re
 import sys
@@ -32,6 +36,7 @@ NAME = re.compile(r"<h2>(?:<a[^>]*>)?(.*?)(?:</a>)?</h2>", re.S)
 ERROR = re.compile(r'<p class="error">(.*?)</p>', re.S)
 EMPTY = re.compile(r'<p class="empty">')
 TITLE = re.compile(r"<title>(.*?)</title>", re.S)
+DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
 
 
 def text(raw: str) -> str:
@@ -55,6 +60,18 @@ def inspect(page: str) -> tuple[str, list[dict]]:
     return title, cards
 
 
+def page_date(title: str) -> dt.date | None:
+    """The day the page is for, read back out of its own title."""
+    found = DATE.search(title)
+    if not found:
+        return None
+    day, month, year = (int(part) for part in found.groups())
+    try:
+        return dt.date(year, month, day)
+    except ValueError:
+        return None
+
+
 def check(page: str, *, expect: int, allow_errors: int) -> list[str]:
     """Every complaint about the page, empty if it is fit to publish."""
     title, cards = inspect(page)
@@ -62,16 +79,27 @@ def check(page: str, *, expect: int, allow_errors: int) -> list[str]:
 
     if not title:
         failures.append("the page has no <title>")
-    if len(cards) < expect:
-        failures.append(f"{len(cards)} cards, expected at least {expect}")
+
+    # At a weekend every restaurant is closed and UniCafe leaves the page
+    # rather than showing an empty card, so a short page with no menus on it
+    # is the correct answer and not something to withhold. A page whose date
+    # cannot be read is treated as a weekday, which is the stricter reading.
+    date = page_date(title)
+    weekend = date is not None and date.weekday() >= 5
+
+    if weekend:
+        if not cards:
+            failures.append("the page has no cards at all")
+    else:
+        if len(cards) < expect:
+            failures.append(f"{len(cards)} cards, expected at least {expect}")
+        if cards and all(c["empty"] or c["error"] for c in cards):
+            failures.append("no card has a menu at all")
 
     broken = [c for c in cards if c["error"]]
     if len(broken) > allow_errors:
         for card in broken:
             failures.append(f"{card['name']}: {card['error']}")
-
-    if cards and all(c["empty"] or c["error"] for c in cards):
-        failures.append("no card has a menu at all")
 
     return failures
 
@@ -90,7 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         page = fh.read()
 
     title, cards = inspect(page)
-    print(f"{title or '(no title)'} — {len(cards)} cards")
+    date = page_date(title)
+    when = " (viikonloppu)" if date and date.weekday() >= 5 else ""
+    print(f"{title or '(no title)'} — {len(cards)} cards{when}")
     for card in cards:
         state = card["error"] or ("ei lounasta" if card["empty"] else "ok")
         print(f"  {'FAIL' if card['error'] else '    '} {card['name']}: {state}")
