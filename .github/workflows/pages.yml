@@ -17,19 +17,29 @@ name: pages
 
 on:
   schedule:
-    # Overnight, in the quietest hours GitHub has, where a scheduled run is
-    # most likely to actually happen: today's page, so that a page for the
-    # right day exists before anyone looks even if the evening before and the
-    # morning after both come to nothing.
-    - cron: "17 1 * * *"        # 03:17/04:17 Helsinki: today
-    - cron: "47 3 * * *"        # 05:47/06:47 Helsinki: today
-    # Through the morning, as the menus appear.
-    - cron: "7,37 4-9 * * *"    # 06:07-12:37 Helsinki, twice an hour: today
-    - cron: "23 10,11 * * *"    # 13:23-14:23 Helsinki, hourly: today
-    # From mid-afternoon, once lunch is over. Several attempts rather than one
-    # a day, because a dropped evening run is exactly what leaves the next
-    # morning with nothing to fall back on.
-    - cron: "12,42 13-20 * * *" # 15:12-23:42 Helsinki, twice an hour: tomorrow
+    # Weekdays, today's page. Overnight first, in the quietest hours GitHub
+    # has, where a scheduled run is likeliest to actually happen, so that a
+    # page for the right day exists before anyone looks even if the evening
+    # before and the morning after both come to nothing. Then through the
+    # morning, as the menus appear.
+    - cron: "17 1 * * 1-5"        # 03:17/04:17 Helsinki: today
+    - cron: "47 3 * * 1-5"        # 05:47/06:47 Helsinki: today
+    - cron: "7,37 4-9 * * 1-5"    # 06:07-12:37 Helsinki, twice an hour: today
+    - cron: "23 10,11 * * 1-5"    # 13:23-14:23 Helsinki, hourly: today
+    # Weekends, today's page: nothing is open, so the page says so and there
+    # is nothing to refresh. Two runs only, to catch the case where Friday or
+    # Saturday evening was dropped and the page is still on the day before.
+    - cron: "47 3 * * 0,6"        # 05:47/06:47 Helsinki: today
+    - cron: "23 10 * * 0,6"       # 12:23/13:23 Helsinki: today
+    # Tomorrow's page, from mid-afternoon once lunch is over. Sunday is in
+    # here rather than with the weekend because Sunday evening is what builds
+    # Monday, which is no less important than any other weekday morning.
+    # Several attempts rather than one, because a dropped evening run is
+    # exactly what leaves the next morning with nothing to fall back on.
+    - cron: "12,42 13-20 * * 0-4" # 15:12-23:42 Helsinki, twice an hour: tomorrow
+    # Friday and Saturday evening build an empty weekend page. It still has to
+    # happen, so that the date rolls over, but three attempts is plenty.
+    - cron: "12 14,17,20 * * 5,6" # 16:12/19:12/22:12 Helsinki: tomorrow
   push:
     branches: [main]
     paths-ignore: ["**.md"]     # prose changes cannot change the page

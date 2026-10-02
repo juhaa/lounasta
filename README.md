@@ -87,12 +87,14 @@ The page is published at <https://juhaa.github.io/lounasta/>, built by
 Because a static page cannot fetch anything itself, it is rebuilt on a
 schedule instead, and which day it is built for follows the clock:
 
-| Helsinki | UTC cron | builds |
-| --- | --- | --- |
-| 03:17 and 05:47 | `17 1 * * *`, `47 3 * * *` | today |
-| 06:07-12:37, twice an hour | `7,37 4-9 * * *` | today |
-| 13:23 and 14:23 | `23 10,11 * * *` | today |
-| 15:12-23:42, twice an hour | `12,42 13-20 * * *` | tomorrow |
+| Days | Helsinki | UTC cron | builds |
+| --- | --- | --- | --- |
+| Mon-Fri | 03:17 and 05:47 | `17 1 * * 1-5`, `47 3 * * 1-5` | today |
+| Mon-Fri | 06:07-12:37, twice an hour | `7,37 4-9 * * 1-5` | today |
+| Mon-Fri | 13:23 and 14:23 | `23 10,11 * * 1-5` | today |
+| Sat-Sun | 05:47 and 12:23 | `47 3 * * 0,6`, `23 10 * * 0,6` | today |
+| Sun-Thu | 15:12-23:42, twice an hour | `12,42 13-20 * * 0-4` | tomorrow |
+| Fri-Sat | 16:12, 19:12 and 22:12 | `12 14,17,20 * * 5,6` | tomorrow |
 
 A restaurant that publishes its menu late in the morning therefore appears
 within half an hour rather than the next day, and the page is never left
@@ -101,6 +103,17 @@ sitting overnight on a day that is already over. Nothing is scheduled in the
 today/tomorrow cut depending on whether EET or EEST is in force. The job also
 runs on every push to `main` that touches something other than prose, and can
 be started by hand from the Actions tab.
+
+Weekends are thinner on purpose. Nothing is open, so the page says so, and
+rebuilding that same empty page every half hour only fetches six restaurant
+sites to no end. The Saturday page and the Sunday page are each built five
+times over rather than thirty-two, which is still more attempts than an empty
+page needs. Sunday evening is the exception and sits with the weekdays, because
+it is what builds Monday, and Monday is no less important than any other
+morning. The weekend runs that remain are there for one case: the evening
+before having been dropped, leaving the page still showing the day before.
+The whole week comes to 170 runs rather than 224, with Monday to Friday
+untouched at 32 builds each.
 
 The overnight pair is the one that matters most, and it is there because no
 single run can be relied on. Building tomorrow's page in the evening already
