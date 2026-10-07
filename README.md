@@ -289,6 +289,15 @@ headings ("Buffet 15,00", "Keittiöstä") and one paragraph per dish. The script
 flattens the page to headings and paragraphs in document order and reads that
 sequence, splitting each dish line into name, diet codes and price.
 
+The two sections price themselves differently, and the page follows them
+rather than flattening the difference. The buffet is one price for the whole
+lunch, printed on its own heading, and its dishes carry none; the à la carte
+dishes under "Keittiöstä" each have one, so each is shown after the dish name
+the way il Trio's are. This is why the `SOURCES` entry does not pass
+`"prices": False` even though the lunch proper is a single price — there are
+no per-dish buffet prices for it to hide, and it would only have suppressed
+the à la carte ones.
+
 ```
 ./lounas_meiccu.py                    # today
 ./lounas_meiccu.py -d all             # the whole week

@@ -50,7 +50,7 @@ SOURCES = [
      {"restaurants": ("Meilahti", "Terkko"), "names": {"Meilahti": "Unicafe"},
       "prices": False}),
     ("Scandic", lounas_scandic.menu_for, {}),
-    ("Meiccu", lounas_meiccu.menu_for, {"prices": False}),
+    ("Meiccu", lounas_meiccu.menu_for, {}),
     ("Viisi Penniä", lounas_lounastaja.menu_for, {}),
     ("il Trio", lounas_iltrio.menu_for, {}),
 ]
