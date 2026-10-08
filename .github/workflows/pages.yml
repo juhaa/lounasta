@@ -65,9 +65,9 @@ jobs:
     outputs:
       sources-clean: ${{ steps.sources.outputs.clean }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -105,7 +105,7 @@ jobs:
             ./check_page.py site/index.html 2>&1 | sed -n 's/^  - /::warning::/p' || true
           fi
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -117,7 +117,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # Runs after the page is already live, purely so that a source which has
   # quietly stopped answering turns the run red and sends the usual failure
