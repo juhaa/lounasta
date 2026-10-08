@@ -52,10 +52,14 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two deployments race; a late build should win over an earlier one.
+# Never let two deployments race. A run that arrives while another is building
+# waits rather than killing it: the later one still deploys last and so still
+# wins, and nothing is left behind as a cancelled run, which reads as a failed
+# one in the run list and in the mail. This is also what GitHub's own Pages
+# workflow does, so that a production deployment is never interrupted midway.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -122,13 +126,37 @@ jobs:
   # Runs after the page is already live, purely so that a source which has
   # quietly stopped answering turns the run red and sends the usual failure
   # mail, instead of sitting unnoticed behind an error card for weeks.
+  #
+  # It reports the first failure of a run of them and then goes quiet. A
+  # restaurant whose site is down stays down for hours, and there is no news
+  # in the second mail about it, or the twentieth; what is worth a mail is the
+  # change. While it stays quiet the build still carries its warning, so the
+  # state is on the run either way.
   sources:
     needs: [build, deploy]
     if: needs.build.outputs.sources-clean == 'false'
     runs-on: ubuntu-latest
+    permissions:
+      actions: read      # to see how the run before this one ended
     steps:
       - name: A source failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
+          # The most recent *completed* run is the one before this one, since
+          # this one is still going. If it failed, the news has been sent.
+          previous=$(gh api \
+            "repos/$REPO/actions/workflows/pages.yml/runs?branch=main&status=completed&per_page=1" \
+            --jq '.workflow_runs[0].conclusion // "none"')
+          echo "the run before this one: $previous"
+
+          if [ "$previous" = "failure" ]; then
+            echo "::warning::A source still is not answering; already reported, staying quiet."
+            echo "Reported on the previous run already. Not failing this one."
+            exit 0
+          fi
+
           echo "The page was published, but not every restaurant answered."
           echo "See the 'Check the page' summary on the build job."
           exit 1

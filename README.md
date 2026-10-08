@@ -145,6 +145,18 @@ separate job that runs *after* the deploy, so a restaurant that has quietly
 changed its site turns the run red and sends the usual failure mail without
 ever holding up the page.
 
+That job reports the first failure of a run of them and then goes quiet: it
+looks at how the previous run ended, and says nothing if that one had already
+failed. A restaurant whose site is down stays down for hours, and there is no
+news in the second mail about it, or the twentieth — what is worth a mail is
+the change. The build still carries its warning while the job stays quiet, so
+the state is on the run either way.
+
+Runs do not cancel one another either. One arriving while another is building
+waits instead: the later one still deploys last and so still wins, and nothing
+is left behind as a cancelled run, which reads as a failed one in the run list
+and in the mail.
+
 The build runs with `TZ=Europe/Helsinki`, so "today" is the Helsinki day and
 not the runner's UTC one. Each run starts on a fresh runner with an empty
 cache, so every build refetches all six sources; `--no-cache` is not needed.
