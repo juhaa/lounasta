@@ -347,6 +347,20 @@ and the key is read out of the HTML.
 A date outside the active week fetches that week automatically; weeks that are
 not published yet answer 404 and the script says so.
 
+The feed has a field for diet markings, and the lunches use it, but the
+desserts are typed in with the markings inside the name instead and the field
+left empty — `{"name": "Porkkanakakkua (L)", "diets": []}`. The page would
+print that `(L)` as if it were part of what the dish is called, so a trailing
+group is lifted out into real markings when the field is empty and every part
+of the group is a marking already known.
+
+Only one group, and only at the very end. `Päärynäjogurttia (L, G) & Keksejä
+(L)` is two things with different markings, and merging the sets would claim
+the biscuits are gluten-free when only the yoghurt is, so a name with two
+groups is left exactly as the restaurant wrote it. So is a parenthesis that is
+simply prose, such as `Gobhi matar masala (paahdettua kukkakaalia ja herneitä
+masalakastikkeessa)`, which the known-markings test already excludes.
+
 ## lounas_iltrio.py
 
 Another API-less WordPress page, written by hand: a bold heading per weekday

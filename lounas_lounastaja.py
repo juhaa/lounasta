@@ -29,9 +29,11 @@ import sys
 import urllib.error
 
 from lounas_common import (
+    DIET_ALIASES,
     WEEKDAYS,
     cache_path,
     matches,
+    normalize_diets,
     read_cache,
     request_json,
     request_text,
@@ -106,6 +108,35 @@ def price_of(lunch: dict, lang: str) -> str:
     return f"{price} {unit}".strip()
 
 
+TRAILING_GROUP = re.compile(r"\s*\(([^()]*)\)\s*$")
+
+
+def diets_in_name(name: str) -> tuple[str, list[str]]:
+    """Lift a trailing "(L, G)" out of a dish name and into real markings.
+
+    The desserts are typed in with their markings inside the name and the
+    allergen field left empty, so the page would otherwise print "(L)" as if
+    it were part of what the dish is called.
+
+    Only one group, only at the very end, and only when every part of it is a
+    marking already known. A name carrying two of them — "Päärynäjogurttia
+    (L, G) & Keksejä (L)" — describes two things with different markings, and
+    merging the sets would claim the biscuits are gluten-free when only the
+    yoghurt is; that one is left exactly as the restaurant wrote it. A
+    parenthesis that is simply prose is left alone for the same reason.
+    """
+    match = TRAILING_GROUP.search(name)
+    if not match:
+        return name, []
+    head = name[: match.start()]
+    if "(" in head:                      # more than one group: see above
+        return name, []
+    parts = [part.strip() for part in re.split(r"[,/]", match.group(1)) if part.strip()]
+    if not parts or any(part.lower() not in DIET_ALIASES for part in parts):
+        return name, []
+    return head.strip(), normalize_diets(parts)
+
+
 def collect(data: dict, args, lang: str) -> list[dict]:
     days = []
     for day in (data.get("week") or {}).get("days") or []:
@@ -115,11 +146,15 @@ def collect(data: dict, args, lang: str) -> list[dict]:
                 text_of(a.get("abbreviation"), lang) or text_of(a.get("title"), lang)
                 for a in lunch.get("allergens") or []
             ]
+            name = text_of(lunch.get("title"), lang)
+            diets = [a for a in allergens if a]
+            if not diets:               # never argue with a marking it did send
+                name, diets = diets_in_name(name)
             lunches.append(
                 {
-                    "name": text_of(lunch.get("title"), lang),
+                    "name": name,
                     "description": text_of(lunch.get("description"), lang),
-                    "diets": [a for a in allergens if a],
+                    "diets": diets,
                     "tags": [text_of(t.get("label") or t.get("title"), lang)
                              for t in lunch.get("tags") or []],
                     "price": price_of(lunch, lang),
