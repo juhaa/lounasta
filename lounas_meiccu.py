@@ -235,8 +235,11 @@ def render(days: list[dict], notes: list[str], extras: list[str], args, parsed_a
 # ------------------------------------------------------------------- aggregator
 
 
-def menu_for(date, *, url=URL, prices=True, use_cache=True) -> list[dict]:
-    """Normalised Meiccu menu for one date (for lounasta_web)."""
+def menu_for(date, *, url=URL, prices=True, lang="fi", use_cache=True) -> list[dict]:
+    """Normalised Meiccu menu for one date (for lounasta_web).
+
+    The page is Finnish only, so `lang` changes nothing and the card says so.
+    """
     blocks = [(b["tag"], b["text"]) for b in html_blocks(fetch_page(url, use_cache=use_cache),
                                                          tags="h[1-6]|p")]
     days, notes, _extras = parse_week(blocks, date)
@@ -255,6 +258,7 @@ def menu_for(date, *, url=URL, prices=True, use_cache=True) -> list[dict]:
     return [
         {
             "id": "meiccu",
+            "lang": "fi",
             "name": "Meiccu",
             "subtitle": "Pihlajatie 34",
             "url": url,

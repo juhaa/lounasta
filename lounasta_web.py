@@ -6,6 +6,7 @@ the same page to a static HTML file:
 
     ./lounasta_web.py                 # http://localhost:8000
     ./lounasta_web.py --build out.html
+    ./lounasta_web.py --lang en       # English where the restaurant has it
 
 Sources are fetched in parallel and each one is isolated: if a site is down or
 changes shape, its card shows the error and the rest of the page still works.
@@ -39,7 +40,7 @@ import lounas_lounastaja
 import lounas_meiccu
 import lounas_scandic
 import lounas_unicafe
-from lounas_common import DIET_NAMES, WEEKDAYS, normalize_diets, resolve_date
+from lounas_common import DIET_NAMES, DIET_NAMES_EN, WEEKDAYS, normalize_diets, resolve_date
 
 # Which restaurants the page shows, in the order they appear on the page. Each
 # entry is a fetcher plus its options; edit this list to follow a different set
@@ -54,6 +55,39 @@ SOURCES = [
     ("Viisi Penniä", lounas_lounastaja.menu_for, {}),
     ("il Trio", lounas_iltrio.menu_for, {}),
 ]
+
+# The languages the page can be shown in. Each fetcher takes the same `lang`
+# and asks its site for that language where the site has one; the page's own
+# words come from TEXT. Finnish is the default and the hosted page.
+LANGS = ("fi", "en")
+
+TEXT = {
+    "fi": {
+        "title": "Lounas", "prev": "edellinen", "today": "tänään", "next": "seuraava",
+        "refresh": "päivitä", "switch": "in English", "retry": "Yritä uudelleen",
+        "detail": "Tekninen tieto", "empty": "Ei lounasta tänään.", "legend": "Merkinnät",
+        "only_fi": "", "fetched": "Haettu %d.%m.%Y klo %H:%M", "sources": "Lähteet",
+        "not_found": "Ravintolan sivua ei löytynyt.",
+        "forbidden": "Ravintolan sivu ei anna lukea listaa.",
+        "http_error": "Ravintolan sivu vastasi virheellä (HTTP {code}).",
+        "unreachable": "Ravintolan sivuun ei juuri nyt saatu yhteyttä.",
+        "unreadable": "Lounaslistaa ei voitu lukea — sivun rakenne on ehkä muuttunut.",
+    },
+    "en": {
+        "title": "Lunch", "prev": "previous", "today": "today", "next": "next",
+        "refresh": "refresh", "switch": "suomeksi", "retry": "Try again",
+        "detail": "Technical detail", "empty": "No lunch today.", "legend": "Markings",
+        "only_fi": "Menu in Finnish only", "fetched": "Fetched %d.%m.%Y at %H:%M",
+        "sources": "Sources",
+        "not_found": "The restaurant's page was not found.",
+        "forbidden": "The restaurant's page does not allow the menu to be read.",
+        "http_error": "The restaurant's page answered with an error (HTTP {code}).",
+        "unreachable": "The restaurant's page could not be reached just now.",
+        "unreadable": "The menu could not be read — the page may have changed.",
+    },
+}
+
+DIET_TEXT = {"fi": DIET_NAMES, "en": DIET_NAMES_EN}
 
 
 # ---------------------------------------------------------------------------- data
@@ -70,32 +104,33 @@ def is_transient(exc: BaseException) -> bool:
                             socket.timeout, socket.gaierror))
 
 
-def describe_error(exc: BaseException) -> tuple[str, str]:
+def describe_error(exc: BaseException, lang: str = "fi") -> tuple[str, str]:
     """A sentence for the reader and the technical detail behind it."""
+    text = TEXT[lang]
     detail = f"{type(exc).__name__}: {exc}"
     if isinstance(exc, urllib.error.HTTPError):
         if exc.code == 404:
-            return "Ravintolan sivua ei löytynyt.", detail
+            return text["not_found"], detail
         if exc.code in (401, 403):
-            return "Ravintolan sivu ei anna lukea listaa.", detail
-        return f"Ravintolan sivu vastasi virheellä (HTTP {exc.code}).", detail
+            return text["forbidden"], detail
+        return text["http_error"].format(code=exc.code), detail
     if is_transient(exc):
-        return "Ravintolan sivuun ei juuri nyt saatu yhteyttä.", detail
-    return "Lounaslistaa ei voitu lukea — sivun rakenne on ehkä muuttunut.", detail
+        return text["unreachable"], detail
+    return text["unreadable"], detail
 
 
-def fetch_all(date: dt.date, *, use_cache: bool = True) -> list[dict]:
+def fetch_all(date: dt.date, *, lang: str = "fi", use_cache: bool = True) -> list[dict]:
     """Run every source in parallel; a failing source becomes an error card."""
     def run(entry):
         label, function, options = entry
         for attempt in range(1, ATTEMPTS + 1):
             try:
-                return list(function(date, use_cache=use_cache, **options))
+                return list(function(date, lang=lang, use_cache=use_cache, **options))
             except Exception as exc:  # one broken site must not take the page down
                 if attempt < ATTEMPTS and is_transient(exc):
                     time.sleep(RETRY_PAUSE * attempt)
                     continue
-                message, detail = describe_error(exc)
+                message, detail = describe_error(exc, lang)
                 return [
                     {
                         "id": f"error-{label.lower()}",
@@ -198,37 +233,49 @@ def esc(value) -> str:
     return html.escape(str(value or ""))
 
 
-def render_error(card: dict, *, live: bool, date: dt.date | None = None) -> str:
+def page_link(lang: str, date: dt.date | None = None, *, refresh: bool = False) -> str:
+    """A link back to the local server's page, keeping the language."""
+    params = ([f"date={date}"] if date else []) + (["refresh=1"] if refresh else [])
+    return "?" + "&amp;".join(params + [f"lang={lang}"])
+
+
+def render_error(card: dict, *, live: bool, date: dt.date | None = None,
+                 lang: str = "fi") -> str:
     """A failed source explains itself and offers a retry, not a traceback."""
+    text = TEXT[lang]
     parts = [f'<p class="error">{esc(card["error"])}</p>', '<p class="error-actions">']
     if live:
-        query = f"?date={date}&amp;refresh=1" if date else "?refresh=1"
-        parts.append(f'<a href="{query}">Yritä uudelleen</a>')
+        parts.append(f'<a href="{page_link(lang, date, refresh=True)}">{text["retry"]}</a>')
     if card.get("error_detail"):
         parts.append(' · ' if live else '')
-        parts.append('<details><summary>Tekninen tieto</summary>'
+        parts.append(f'<details><summary>{text["detail"]}</summary>'
                      f'<code>{esc(card["error_detail"])}</code></details>')
     parts.append("</p>")
     return "".join(parts)
 
 
-def render_card(card: dict, *, live: bool = True, date: dt.date | None = None) -> str:
+def render_card(card: dict, *, live: bool = True, date: dt.date | None = None,
+                lang: str = "fi") -> str:
+    text = TEXT[lang]
     parts = ['<section class="card">']
     name = esc(card["name"])
     parts.append(f'<h2><a href="{esc(card["url"])}">{name}</a></h2>' if card.get("url")
                  else f"<h2>{name}</h2>")
 
-    meta = " · ".join(p for p in (card.get("subtitle"), card.get("hours")) if p)
+    # A site with no menu in the page's language says so, rather than leaving
+    # the reader to wonder why one card is in Finnish.
+    other = text["only_fi"] if card.get("lang", lang) != lang else ""
+    meta = " · ".join(p for p in (card.get("subtitle"), card.get("hours"), other) if p)
     if meta:
         parts.append(f'<p class="meta">{esc(meta)}</p>')
     if card.get("error"):
-        parts.append(render_error(card, live=live, date=date))
+        parts.append(render_error(card, live=live, date=date, lang=lang))
     if card.get("note"):
         parts.append(f'<p class="meta">{esc(card["note"])}</p>')
 
     dishes = sum(len(section["dishes"]) for section in card.get("sections") or [])
     if not dishes and not card.get("error"):
-        parts.append('<p class="empty">Ei lounasta tänään.</p>')
+        parts.append(f'<p class="empty">{text["empty"]}</p>')
 
     for section in card.get("sections") or []:
         if not section["dishes"]:
@@ -256,48 +303,53 @@ def render_card(card: dict, *, live: bool = True, date: dt.date | None = None) -
     return "\n".join(parts)
 
 
-def render_legend(cards: list[dict]) -> str:
+def render_legend(cards: list[dict], lang: str = "fi") -> str:
     codes = diets_used(cards)
     if not codes:
         return ""
+    names = DIET_TEXT[lang]
     items = "".join(
-        f"<div><dt>{esc(code)}</dt><dd>{esc(DIET_NAMES.get(code, '?'))}</dd></div>"
+        f"<div><dt>{esc(code)}</dt><dd>{esc(names.get(code, '?'))}</dd></div>"
         for code in codes
     )
-    return f'<aside class="legend"><h2>Merkinnät</h2><dl>{items}</dl></aside>'
+    return f'<aside class="legend"><h2>{TEXT[lang]["legend"]}</h2><dl>{items}</dl></aside>'
 
 
-def render_page(date: dt.date, cards: list[dict], *, live: bool = True) -> str:
-    weekday = WEEKDAYS["fi"][date.weekday()]
+def render_page(date: dt.date, cards: list[dict], *, live: bool = True,
+                lang: str = "fi") -> str:
+    text = TEXT[lang]
+    weekday = WEEKDAYS[lang][date.weekday()]
     heading = f"{weekday} {date:%d.%m.%Y}"
     day = dt.timedelta(days=1)
+    other = next(code for code in LANGS if code != lang)
     nav = (
-        f'<nav><a href="?date={date - day}">&larr; edellinen</a>'
-        f'<a href="?date={dt.date.today()}">tänään</a>'
-        f'<a href="?date={date + day}">seuraava &rarr;</a>'
-        f'<a href="?date={date}&amp;refresh=1">päivitä</a></nav>'
+        f'<nav><a href="{page_link(lang, date - day)}">&larr; {text["prev"]}</a>'
+        f'<a href="{page_link(lang, dt.date.today())}">{text["today"]}</a>'
+        f'<a href="{page_link(lang, date + day)}">{text["next"]} &rarr;</a>'
+        f'<a href="{page_link(lang, date, refresh=True)}">{text["refresh"]}</a>'
+        f'<a href="{page_link(other, date)}" lang="{other}">{text["switch"]}</a></nav>'
         if live else ""
     )
-    body = "\n".join(render_card(card, live=live, date=date) for card in cards)
+    body = "\n".join(render_card(card, live=live, date=date, lang=lang) for card in cards)
     # A page built the evening before is read the next morning, and a page
     # the scheduler never rebuilt can be older still, so the stamp carries a
     # date as well as a time.
-    stamp = dt.datetime.now().strftime("%d.%m.%Y klo %H:%M")
+    stamp = dt.datetime.now().strftime(text["fetched"])
     return f"""<!doctype html>
-<html lang="fi">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lounas {heading}</title>
+<title>{text["title"]} {heading}</title>
 <style>{STYLE}</style>
 </head>
 <body>
-<header><h1>Lounas</h1><span class="date">{esc(heading)}</span>{nav}</header>
+<header><h1>{text["title"]}</h1><span class="date">{esc(heading)}</span>{nav}</header>
 <main>
 {body}
 </main>
-{render_legend(cards)}
-<footer>Haettu {stamp}. Lähteet: menu.unicafe.fi, menu.hus.fi, menu.scandichotels.com,
+{render_legend(cards, lang)}
+<footer>{stamp}. {text["sources"]}: menu.unicafe.fi, menu.hus.fi, menu.scandichotels.com,
 meiccu.fi, lounas.app, iltrio.fi.</footer>
 </body>
 </html>
@@ -324,19 +376,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.respond(400, "text/plain; charset=utf-8", str(exc).encode())
             return
 
+        lang = query.get("lang", [self.server.lang])[0]
+        if lang not in LANGS:
+            self.respond(400, "text/plain; charset=utf-8",
+                         f"unknown lang: {lang!r} (one of {', '.join(LANGS)})".encode())
+            return
+
         use_cache = "refresh" not in query and not self.server.no_cache
         try:
-            cards = fetch_all(date, use_cache=use_cache)
+            cards = fetch_all(date, lang=lang, use_cache=use_cache)
         except Exception:  # pragma: no cover - the per-source guard normally wins
             traceback.print_exc()
             self.respond(500, "text/plain; charset=utf-8", b"internal error")
             return
 
         if parsed.path == "/":
-            body = render_page(date, cards).encode("utf-8")
+            body = render_page(date, cards, lang=lang).encode("utf-8")
             self.respond(200, "text/html; charset=utf-8", body)
         else:
-            payload = {"date": date.isoformat(), "restaurants": cards}
+            payload = {"date": date.isoformat(), "lang": lang, "restaurants": cards}
             body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self.respond(200, "application/json; charset=utf-8", body)
 
@@ -356,8 +414,9 @@ class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, address, handler, *, no_cache: bool):
+    def __init__(self, address, handler, *, no_cache: bool, lang: str):
         self.no_cache = no_cache
+        self.lang = lang
         super().__init__(address, handler)
 
 
@@ -374,9 +433,11 @@ def build_parser() -> argparse.ArgumentParser:
             "  ./lounasta_web.py --port 9000 --open  another port, open a browser\n"
             "  ./lounasta_web.py --build lounas.html write the page to a file\n"
             "  ./lounasta_web.py --json              print the same data as JSON\n"
+            "  ./lounasta_web.py --lang en           English where the restaurant has it\n"
             "\nwhile serving:\n"
             "  /                 today's page       /?date=2026-09-23  another day\n"
             "  /?refresh=1       skip the cache     /api               the data as JSON\n"
+            "  /?lang=en         in English\n"
         ),
     )
     parser.add_argument("-p", "--port", type=int, default=8000, help="port to serve on")
@@ -387,6 +448,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true", help="print the data as JSON and exit")
     parser.add_argument("--open", action="store_true", help="open the page in a browser")
     parser.add_argument("--no-cache", action="store_true", help="always refetch every source")
+    parser.add_argument("--lang", default="fi", choices=LANGS,
+                        help="page language; ?lang= overrides it while serving (default: fi)")
     return parser
 
 
@@ -401,19 +464,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.build or args.json:
-        cards = fetch_all(date, use_cache=not args.no_cache)
+        cards = fetch_all(date, lang=args.lang, use_cache=not args.no_cache)
         if args.json:
-            json.dump({"date": date.isoformat(), "restaurants": cards},
+            json.dump({"date": date.isoformat(), "lang": args.lang, "restaurants": cards},
                       sys.stdout, ensure_ascii=False, indent=2)
             print()
         if args.build:
             with open(args.build, "w", encoding="utf-8") as fh:
-                fh.write(render_page(date, cards, live=False))
+                fh.write(render_page(date, cards, live=False, lang=args.lang))
             print(f"wrote {args.build}", file=sys.stderr)
         return 0
 
     handler = functools.partial(Handler)
-    with Server((args.host, args.port), handler, no_cache=args.no_cache) as server:
+    with Server((args.host, args.port), handler, no_cache=args.no_cache,
+                lang=args.lang) as server:
         url = f"http://{args.host}:{args.port}/"
         print(f"serving {url} (ctrl-c to stop)", file=sys.stderr)
         if args.open:

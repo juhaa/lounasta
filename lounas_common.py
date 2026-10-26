@@ -145,11 +145,24 @@ DIET_NAMES = {
     "Ilmastovalinta": "ilmastovalinta",
 }
 
+DIET_NAMES_EN = {
+    "G": "gluten-free",
+    "L": "lactose-free",
+    "VL": "low-lactose",
+    "M": "dairy-free",
+    "Mu": "egg-free",
+    "V": "vegan",
+    "Kasvis": "vegetarian",
+    "Kela": "meets the Kela meal subsidy criteria",
+    "Ilmastovalinta": "climate choice",
+}
+
 DIET_ALIASES = {
     "g": "G", "gluteeniton": "G", "gluten-free": "G", "gluteenit√∂n": "G",
     "l": "L", "laktoositon": "L", "lactose-free": "L",
-    "vl": "VL", "vähälaktoosinen": "VL", "low-lactose": "VL",
-    "m": "M", "maidoton": "M", "dairy-free": "M", "milk-free": "M",
+    "vl": "VL", "ll": "VL", "vähälaktoosinen": "VL", "low-lactose": "VL",
+    "m": "M", "df": "M", "maidoton": "M", "dairy-free": "M", "milk-free": "M",
+    "no-milk": "M",
     "mu": "Mu", "munaton": "Mu", "egg-free": "Mu",
     "v": "V", "veg": "V", "vega": "V", "vegaani": "V", "vegaaninen": "V", "vegan": "V",
     "kasvis": "Kasvis", "kasvisruoka": "Kasvis", "vegetarian": "Kasvis",

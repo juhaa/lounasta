@@ -252,7 +252,8 @@ def lunch_hours(location: dict, lang: str) -> list[str]:
             )
             for h in hours
         )
-        out.append(f"{WEEKDAYS['fi'][weekday]} lounas {spans}")
+        label = "lunch" if lang == "en" else "lounas"
+        out.append(f"{WEEKDAYS.get(lang, WEEKDAYS['fi'])[weekday]} {label} {spans}")
     return out
 
 
@@ -278,7 +279,7 @@ def menu_for(date, *, key=DEFAULT_KEY, lang="fi", use_cache=True) -> list[dict]:
         for lunch in (day or {}).get("lunches", [])
     ]
     hours = lunch_hours(location, lang)
-    weekday = WEEKDAYS["fi"][date.weekday()]
+    weekday = WEEKDAYS.get(lang, WEEKDAYS["fi"])[date.weekday()]
     return [
         {
             "id": f"lounastaja-{key[:8]}",

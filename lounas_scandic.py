@@ -55,7 +55,7 @@ WEEKDAY_TITLES = {
     "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
 }
 
-DIET_CODES = {"L", "VL", "M", "G", "V", "A", "VEG", "LL"}
+DIET_CODES = {"L", "VL", "M", "G", "V", "A", "VEG", "LL", "DF"}
 
 # Everything from the first of these rows on is small print, not food.
 FOOTER_RE = re.compile(
@@ -257,8 +257,9 @@ def render(menu_file: dict, days: list[dict], notes: list[str], args, parsed_any
 
 
 def menu_for(date, *, hotel=DEFAULT_HOTEL, rest=DEFAULT_REST, name="Scandic",
-             english=False, use_cache=True) -> list[dict]:
+             english=False, lang="fi", use_cache=True) -> list[dict]:
     """Normalised menu of one Scandic restaurant for one date (for lounasta_web)."""
+    english = english or lang == "en"
     files = list_menu_files(hotel, rest, english, use_cache=use_cache)
     menu_file = pick_file(files, None, date.isocalendar().week, english)
     data = fetch_pdf(hotel, rest, menu_file["file_id"], use_cache=use_cache)
@@ -278,7 +279,9 @@ def menu_for(date, *, hotel=DEFAULT_HOTEL, rest=DEFAULT_REST, name="Scandic",
             "name": name,
             "subtitle": menu_file["title"],
             "url": menu_file["url"],
-            "hours": next((n for n in notes if "klo" in n.lower()), None),
+            # "KLO 10.30–13.00" in Finnish, "10:30 AM-1:00 PM" in English.
+            "hours": next((n for n in notes if re.search(r"\bklo\b|\d\s*[ap]m\b", n, re.I)),
+                          None),
             "note": None,
             "sections": [{"name": key or None, "dishes": dishes}
                          for key, dishes in sections.items()],

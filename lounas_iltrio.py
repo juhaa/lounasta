@@ -227,8 +227,11 @@ def render(days: list[dict], notes: list[str], args, parsed_any: bool) -> str:
 # ------------------------------------------------------------------- aggregator
 
 
-def menu_for(date, *, url=URL, use_cache=True) -> list[dict]:
-    """Normalised il Trio menu for one date (for lounasta_web)."""
+def menu_for(date, *, url=URL, lang="fi", use_cache=True) -> list[dict]:
+    """Normalised il Trio menu for one date (for lounasta_web).
+
+    The page is Finnish only, so `lang` changes nothing and the card says so.
+    """
     blocks = html_blocks(fetch_page(url, use_cache=use_cache), tags="h[1-6]|p")
     days, _notes = parse_week(blocks, date)
     day = next((d for d in days if d["date"] == date.isoformat()), None)
@@ -245,11 +248,12 @@ def menu_for(date, *, url=URL, use_cache=True) -> list[dict]:
     return [
         {
             "id": "iltrio",
+            "lang": "fi",
             "name": "il Trio",
             "subtitle": "Ristorante",
             "url": url,
             "hours": (day or {}).get("hours"),
-            "note": "Suljettu" if (day or {}).get("closed") and not dishes else None,
+            "note": ("Closed" if lang == "en" else "Suljettu") if (day or {}).get("closed") and not dishes else None,
             "sections": [{"name": None, "dishes": dishes}] if dishes else [],
         }
     ]

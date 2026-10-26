@@ -12,6 +12,7 @@ only — nothing to install. Every fetch is cached under `~/.cache/lounasta/` fo
 ./lounasta_web.py --port 9000 --open   # another port, opens a browser
 ./lounasta_web.py --build lounas.html  # write a static page instead
 ./lounasta_web.py --json               # the same data as JSON
+./lounasta_web.py --lang en            # in English (also with --build/--json)
 ```
 
 While the server runs:
@@ -21,6 +22,7 @@ While the server runs:
 | `/` | today's menus |
 | `/?date=2026-09-23` | another day (also `tomorrow`, `pe`, `23.09.`) |
 | `/?refresh=1` | skip the cache for this load |
+| `/?lang=en` | in English (`fi` is the default) |
 | `/api` | the same data as JSON (takes `date` too) |
 
 Sources are fetched in parallel and each is isolated: a site that is down or
@@ -34,8 +36,20 @@ different UniCafe or another Scandic hotel is a one-line edit. `"prices": False`
 there hides per-dish prices for restaurants that charge one price for the whole
 lunch; the command-line scripts always print them.
 
-Every fetcher also exposes `menu_for(date)` returning the same normalised
-shape the page uses, which is the seam to add a new restaurant on.
+Every fetcher also exposes `menu_for(date, lang=...)` returning the same
+normalised shape the page uses, which is the seam to add a new restaurant on.
+
+### Language
+
+The page is Finnish by default and can be shown in English: `?lang=en` while
+serving, with a link in the header to switch, or `--lang en` for `--build`
+and `--json`. The page's own words come from `TEXT` in `lounasta_web.py`; the
+menus come from each restaurant in English where it publishes one — HUS,
+UniCafe, Scandic and Viisi Penniä do. Meiccu and il Trio publish in Finnish
+only, so their cards stay Finnish and say so. The English feeds are not always
+complete either: a dish or a section heading the restaurant never translated
+arrives in Finnish. The diet codes stay the same in both languages and only
+the "Markings" box explains them in English. The hosted page is Finnish only.
 
 ### Diet markings
 
